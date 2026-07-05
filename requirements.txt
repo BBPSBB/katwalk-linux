@@ -1,0 +1,12 @@
+# Python deps for katwalk-linux. Create a venv and install:
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#
+# The core daemon reads the device over hidraw (stdlib only). These packages are for the
+# VR-facing pieces: openvr for HMD pose + the SteamVR driver feed, and Pillow/glfw/PyOpenGL
+# for the in-VR overlay. Versions below are what was tested; newer ones will likely work too.
+openvr==2.12.1401
+pyusb==1.3.1
+Pillow==12.2.0
+glfw==2.10.0
+PyOpenGL==3.1.10
+numpy==2.5.1

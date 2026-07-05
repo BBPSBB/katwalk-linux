@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>katwalk-linux · tuner</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: #121826;
+      --panel2: #0e1422;
+      --line: #1e2940;
+      --txt: #c7d2e0;
+      --muted: #5b6b85;
+      --cyan: #22d3ee;
+      --green: #34d399;
+      --orange: #fb923c;
+      --red: #f87171;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--txt);
+      font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif
+    }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel2)
+    }
+
+    .bar h1 {
+      font-size: 15px;
+      letter-spacing: .16em;
+      font-weight: 600;
+      margin: 0;
+      color: #e6edf6
+    }
+
+    .bar h1 b {
+      color: var(--cyan)
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 8px currentColor
+    }
+
+    .dot.on {
+      background: var(--green)
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .spacer {
+      flex: 1
+    }
+
+    .pill {
+      font: 600 11px ui-monospace, monospace;
+      color: var(--muted)
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 330px;
+      gap: 14px;
+      padding: 14px;
+      height: calc(100% - 49px)
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden
+    }
+
+    #arena {
+      display: block;
+      width: 100%;
+      height: 100%
+    }
+
+    .side {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: auto
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px
+    }
+
+    .lab {
+      font: 600 10px ui-sans-serif;
+      letter-spacing: .14em;
+      color: var(--muted);
+      text-transform: uppercase
+    }
+
+    .speedrow {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-top: 6px
+    }
+
+    .speedrow .big {
+      font: 700 34px ui-monospace, monospace;
+      color: #eaf2fb
+    }
+
+    .speedrow .u {
+      font: 600 12px ui-monospace;
+      color: var(--muted)
+    }
+
+    .badge {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font: 700 12px ui-sans-serif;
+      letter-spacing: .1em;
+      background: #1b2438;
+      color: var(--muted)
+    }
+
+    .badge.walk {
+      background: rgba(52, 211, 153, .16);
+      color: var(--green)
+    }
+
+    .badge.sprint {
+      background: rgba(251, 146, 60, .18);
+      color: var(--orange)
+    }
+
+    .meter {
+      height: 8px;
+      border-radius: 6px;
+      background: #0c1320;
+      margin-top: 10px;
+      overflow: hidden;
+      border: 1px solid var(--line)
+    }
+
+    .meter>i {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--green), var(--orange));
+      transition: width .08s linear
+    }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px
+    }
+
+    .feet {
+      display: flex;
+      gap: 14px;
+      justify-content: space-around;
+      margin-top: 8px
+    }
+
+    .foot {
+      text-align: center
+    }
+
+    .foot canvas {
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      border-radius: 8px
+    }
+
+    .foot .fl {
+      font: 600 10px ui-sans-serif;
+      color: var(--muted);
+      margin-top: 4px
+    }
+
+    .foot .fv {
+      font: 600 11px ui-monospace;
+      color: var(--txt)
+    }
+
+    .kv {
+      display: flex;
+      justify-content: space-between;
+      font: 600 12px ui-monospace;
+      margin-top: 7px
+    }
+
+    .kv span:first-child {
+      color: var(--muted)
+    }
+
+    .sliders {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px
+    }
+
+    .sl label {
+      display: flex;
+      justify-content: space-between;
+      font: 600 11px ui-sans-serif;
+      color: var(--txt)
+    }
+
+    .sl label b {
+      color: var(--cyan);
+      font-family: ui-monospace
+    }
+
+    .sl .hint {
+      font: 500 10px ui-sans-serif;
+      color: var(--muted);
+      margin: 2px 0 8px
+    }
+
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--cyan)
+    }
+
+    .prof {
+      display: flex;
+      gap: 6px;
+      align-items: center
+    }
+
+    .prof select,
+    .prof button {
+      background: #0e1422;
+      color: var(--txt);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      font: 600 11px ui-sans-serif;
+      padding: 4px 8px;
+      cursor: pointer
+    }
+
+    .prof button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan)
+    }
+
+    .navbtn {
+      background: #0e1422;
+      color: var(--txt);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      font: 600 11px ui-sans-serif;
+      padding: 5px 10px;
+      cursor: pointer;
+      text-decoration: none
+    }
+
+    .navbtn:hover {
+      border-color: var(--cyan);
+      color: var(--cyan)
+    }
+  </style>
+</head>
+
+<body>
+  <div class="bar">
+    <h1>katwalk<b>-linux</b> · LOCOMOTION TUNER</h1>
+    <span class="dot" id="dot"></span>
+    <span class="status" id="status">connecting…</span>
+    <span class="spacer"></span>
+    <span class="prof">
+      <select id="profiles" title="profile"></select>
+      <button id="pload">load</button>
+      <button id="psave">save as…</button>
+      <button id="pdel">del</button>
+    </span>
+    <a class="navbtn" href="/capture" title="guided movement capture">capture ▸</a>
+    <span class="pill" id="batt">batt - · fw -</span>
+  </div>
+
+  <main>
+    <div class="card"><canvas id="arena"></canvas></div>
+
+    <div class="side">
+      <div class="panel">
+        <div class="lab">Speed</div>
+        <div class="speedrow"><span class="big" id="speed">0.00</span><span class="u">km/h</span></div>
+        <div class="meter"><i id="speedbar"></i></div>
+        <div><span class="badge" id="state">IDLE</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="lab">Orientation</div>
+        <div class="kv"><span>heading</span><span id="heading">0°</span></div>
+        <div class="kv"><span>move dir</span><span id="dir">0°</span></div>
+        <div class="kv"><span>cadence</span><span id="cadence">0 spm</span></div>
+        <div class="lab" style="margin-top:14px">Foot optical (±600)</div>
+        <div class="feet">
+          <div class="foot"><canvas id="padL" width="92" height="92"></canvas>
+            <div class="fl">LEFT</div>
+            <div class="fv" id="fvL">0, 0</div>
+          </div>
+          <div class="foot"><canvas id="padR" width="92" height="92"></canvas>
+            <div class="fl">RIGHT</div>
+            <div class="fv" id="fvR">0, 0</div>
+          </div>
+        </div>
+        <div class="lab" style="margin-top:14px">Stick output → game (±1)</div>
+        <div class="feet">
+          <div class="foot"><canvas id="padStick" width="92" height="92"></canvas>
+            <div class="fl">LEFT STICK</div>
+            <div class="fv" id="fvStick">0.00, 0.00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel sliders">
+      <div class="sl"><label>Walking Speed Multiplier <b id="v_speed_multiplier">1.00</b></label>
+        <div class="hint">overall speed scale</div>
+        <input type="range" id="speed_multiplier" min="0.2" max="3" step="0.05" value="1">
+      </div>
+      <div class="sl"><label>Unintentional Movement Filter <b id="v_deadzone">30</b></label>
+        <div class="hint">deadzone on foot counts</div>
+        <input type="range" id="deadzone" min="0" max="200" step="5" value="30">
+      </div>
+      <div class="sl"><label>Walking Accuracy <b id="v_accuracy">0.35</b></label>
+        <div class="hint">smooth ←→ responsive</div>
+        <input type="range" id="accuracy" min="0" max="1" step="0.02" value="0.35">
+      </div>
+      <div class="sl"><label>Sprint Threshold <b id="v_sprint_threshold">6.0</b></label>
+        <div class="hint">km/h above this = running</div>
+        <input type="range" id="sprint_threshold" min="1" max="12" step="0.5" value="6">
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    let S = {
+      connected: false, speed: 0, heading: 0, direction: 0, moving: false, sprinting: false,
+      footL: [0, 0], footR: [0, 0]
+    };
+    let paramsInit = false;
+
+    // --- live data via SSE ---
+    const es = new EventSource('/stream');
+    es.onmessage = e => { S = JSON.parse(e.data); render(); if (!paramsInit && S.params) initParams(S.params); };
+    es.onerror = () => { $('dot').classList.remove('on'); $('status').textContent = 'stream lost'; };
+
+    function setSliders(p) {
+      for (const k of ['speed_multiplier', 'deadzone', 'accuracy', 'sprint_threshold']) {
+        if (p[k] !== undefined) { $(k).value = p[k]; $('v_' + k).textContent = fmt(k, p[k]); }
+      }
+    }
+    function initParams(p) { paramsInit = true; setSliders(p); }
+
+    // --- profiles ---
+    async function refreshProfiles() {
+      try {
+        const r = await (await fetch('/profiles')).json();
+        const sel = $('profiles'); sel.innerHTML = '';
+        r.names.forEach(n => {
+          const o = document.createElement('option');
+          o.value = n; o.textContent = n; if (n === r.active) o.selected = true; sel.appendChild(o);
+        });
+      } catch (e) { }
+    }
+    async function loadProfile() {
+      const n = $('profiles').value; if (!n) return;
+      const r = await (await fetch('/profile/load?name=' + encodeURIComponent(n))).json();
+      if (r.params) setSliders(r.params);
+    }
+    async function saveProfile() {
+      const n = (prompt('Save profile as:') || '').trim(); if (!n) return;
+      await fetch('/profile/save?name=' + encodeURIComponent(n)); refreshProfiles();
+    }
+    async function deleteProfile() {
+      const n = $('profiles').value; if (!n) return;
+      if (!confirm('Delete profile "' + n + '"?')) return;
+      await fetch('/profile/delete?name=' + encodeURIComponent(n)); refreshProfiles();
+    }
+    $('pload').onclick = loadProfile; $('psave').onclick = saveProfile; $('pdel').onclick = deleteProfile;
+    refreshProfiles();
+    function fmt(k, v) { return k === 'deadzone' ? Math.round(v) : (+v).toFixed(2); }
+
+    // --- sliders -> /set ---
+    for (const k of ['speed_multiplier', 'deadzone', 'accuracy', 'sprint_threshold']) {
+      $(k).addEventListener('input', e => {
+        const v = e.target.value; $('v_' + k).textContent = fmt(k, v);
+        fetch(`/set?${k}=${v}`);
+      });
+    }
+
+    // --- readouts ---
+    function render() {
+      $('dot').classList.toggle('on', !!S.connected);
+      $('status').textContent = S.status || (S.connected ? 'streaming' : '-');
+      $('batt').textContent = `batt ${S.battery ?? '-'}% · fw V${S.fw ?? '-'}`;
+      $('speed').textContent = (S.speed || 0).toFixed(2);
+      $('speedbar').style.width = Math.min(100, (S.speed || 0) / 10 * 100) + '%';
+      $('heading').textContent = (S.heading || 0).toFixed(0) + '°';
+      $('dir').textContent = (S.direction || 0).toFixed(0) + '°';
+      $('cadence').textContent = (S.cadence_spm || 0) + ' spm';
+      const b = $('state'); b.className = 'badge' + (S.sprinting ? ' sprint' : (S.moving ? ' walk' : ''));
+      b.textContent = S.sprinting ? 'SPRINT' : (S.moving ? 'WALK' : 'IDLE');
+      $('fvL').textContent = (S.footL || [0, 0]).join(', ');
+      $('fvR').textContent = (S.footR || [0, 0]).join(', ');
+      drawPad($('padL'), S.footL, S.groundedL); drawPad($('padR'), S.footR, S.groundedR);
+      const st = S.stick || [0, 0];
+      $('fvStick').textContent = st.map(v => (+v).toFixed(2)).join(', ');
+      drawStick($('padStick'), st);
+    }
+    function drawStick(cv, s) {
+      const c = cv.getContext('2d'), w = cv.width, h = cv.height; c.clearRect(0, 0, w, h);
+      c.strokeStyle = '#23314e'; c.lineWidth = 1;
+      c.beginPath(); c.arc(w / 2, h / 2, w / 2 - 8, 0, 7); c.stroke();                 // stick gate circle
+      c.beginPath(); c.moveTo(w / 2, 6); c.lineTo(w / 2, h - 6); c.moveTo(6, h / 2); c.lineTo(w - 6, h / 2); c.stroke();
+      const x = Math.max(-1, Math.min(1, s[0] || 0)), y = Math.max(-1, Math.min(1, s[1] || 0));
+      const px = w / 2 + x * (w / 2 - 8), py = h / 2 - y * (h / 2 - 8);                        // +y up = forward
+      c.strokeStyle = '#22d3ee'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(w / 2, h / 2); c.lineTo(px, py); c.stroke();
+      c.fillStyle = '#22d3ee'; c.beginPath(); c.arc(px, py, 5, 0, 7); c.fill();
+    }
+    function drawPad(cv, f, grounded) {
+      const c = cv.getContext('2d'), w = cv.width, h = cv.height; c.clearRect(0, 0, w, h);
+      c.strokeStyle = '#23314e'; c.lineWidth = 1; c.beginPath();
+      c.moveTo(w / 2, 6); c.lineTo(w / 2, h - 6); c.moveTo(6, h / 2); c.lineTo(w - 6, h / 2); c.stroke();
+      if (!grounded) {                          // foot in the air -> no surface lock (app hides its dot)
+        c.strokeStyle = '#39507a'; c.setLineDash([3, 3]);
+        c.beginPath(); c.arc(w / 2, h / 2, 7, 0, 7); c.stroke(); c.setLineDash([]);
+        c.fillStyle = '#5b6b85'; c.font = '9px ui-sans-serif'; c.textAlign = 'center';
+        c.fillText('AIR', w / 2, h - 9);
+        return;
+      }
+      const x = (f ? f[0] : 0) / 600, y = (f ? f[1] : 0) / 600;
+      const px = w / 2 + Math.max(-1, Math.min(1, x)) * (w / 2 - 8);
+      const py = h / 2 - Math.max(-1, Math.min(1, y)) * (h / 2 - 8);   // +y up = forward
+      c.fillStyle = '#34d399'; c.beginPath(); c.arc(px, py, 5, 0, 7); c.fill();
+    }
+
+    // --- arena: camera-follow top-down avatar with trail ---
+    const cv = $('arena'); const ctx = cv.getContext('2d');
+    let W = 0, H = 0, DPR = Math.max(1, devicePixelRatio || 1);
+    function resize() {
+      const r = cv.parentElement.getBoundingClientRect();
+      W = r.width; H = r.height; cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    new ResizeObserver(resize).observe(cv.parentElement); resize();
+
+    let wx = 0, wy = 0, trail = [], last = performance.now();
+    function deg2rad(d) { return d * Math.PI / 180 }
+    function loop(now) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      // integrate world position from speed + direction (0deg = up/forward, CW+)
+      const v = (S.speed || 0) * 120;            // u/s -> px/s
+      const a = deg2rad(S.direction || 0);
+      const vx = Math.sin(a) * v, vy = -Math.cos(a) * v;
+      if (S.moving) {
+        wx += vx * dt; wy += vy * dt;
+        if (!trail.length || Math.hypot(wx - trail[trail.length - 1].x, wy - trail[trail.length - 1].y) > 4)
+          trail.push({ x: wx, y: wy }); if (trail.length > 400) trail.shift();
+      }
+      draw();
+      requestAnimationFrame(loop);
+    }
+    function draw() {
+      ctx.clearRect(0, 0, W, H); const cx = W / 2, cy = H / 2, cell = 44;
+      // scrolling grid
+      ctx.strokeStyle = '#15203a'; ctx.lineWidth = 1; ctx.beginPath();
+      const ox = ((-wx) % cell + cell) % cell, oy = ((-wy) % cell + cell) % cell;
+      for (let x = ox; x < W; x += cell) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+      for (let y = oy; y < H; y += cell) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+      ctx.stroke();
+      // trail
+      ctx.lineWidth = 3; ctx.lineCap = 'round';
+      for (let i = 1; i < trail.length; i++) {
+        const p0 = trail[i - 1], p1 = trail[i];
+        ctx.strokeStyle = `rgba(34,211,238,${i / trail.length * 0.7})`;
+        ctx.beginPath(); ctx.moveTo(cx + p0.x - wx, cy + p0.y - wy); ctx.lineTo(cx + p1.x - wx, cy + p1.y - wy); ctx.stroke();
+      }
+      // velocity arrow
+      const a = deg2rad(S.direction || 0), len = 18 + (S.speed || 0) * 55;
+      if (S.moving) {
+        const ex = cx + Math.sin(a) * len, ey = cy - Math.cos(a) * len;
+        ctx.strokeStyle = S.sprinting ? '#fb923c' : '#34d399'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
+        ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 4); ctx.lineTo(-6, 4); ctx.fill(); ctx.restore();
+      }
+      // player token + facing wedge (heading)
+      const hr = deg2rad(S.heading || 0);
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(hr);
+      ctx.fillStyle = 'rgba(34,211,238,.18)'; ctx.beginPath();
+      ctx.moveTo(0, -20); ctx.arc(0, 0, 20, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#22d3ee'; ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fill();
+      ctx.fillStyle = '#eaf2fb'; ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(5, -4); ctx.lineTo(-5, -4); ctx.fill();
+      ctx.restore();
+      // compass
+      ctx.fillStyle = '#5b6b85'; ctx.font = '11px ui-monospace'; ctx.textAlign = 'center';
+      ctx.fillText('body heading ' + (S.heading || 0).toFixed(0) + '°', cx, 18);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+
+</html>

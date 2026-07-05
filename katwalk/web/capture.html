@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>katwalk-linux - motion capture</title>
+  <style>
+    :root {
+      --bg: #0a0e16;
+      --panel: #111726;
+      --line: #22d3ee;
+      --txt: #eaf2fb;
+      --muted: #8b97ad;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --red: #fb6a5e;
+      --blue: #60a5fa;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: system-ui, Segoe UI, Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    /* ---- start screen ---- */
+    #setup {
+      margin: auto;
+      max-width: 560px;
+      padding: 32px;
+      text-align: center
+    }
+
+    #setup h1 {
+      color: var(--line);
+      font-size: 28px;
+      margin: 0 0 6px
+    }
+
+    #setup p {
+      color: var(--muted);
+      line-height: 1.5
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      margin: 18px 0
+    }
+
+    input[type=number] {
+      width: 90px;
+      font-size: 22px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #2a3346;
+      background: #0c121d;
+      color: var(--txt);
+      text-align: center
+    }
+
+    button {
+      font-size: 18px;
+      font-weight: 700;
+      padding: 12px 22px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--line);
+      cursor: pointer
+    }
+
+    button:hover {
+      background: rgba(34, 211, 238, .12)
+    }
+
+    button.go {
+      background: var(--line);
+      color: #04121a
+    }
+
+    ol.seq {
+      text-align: left;
+      color: var(--muted);
+      font-size: 14px;
+      max-height: 34vh;
+      overflow: auto;
+      background: #0c121d;
+      border: 1px solid #1c2536;
+      border-radius: 10px;
+      padding: 14px 14px 14px 32px
+    }
+
+    ol.seq b {
+      color: var(--txt)
+    }
+
+    /* ---- run stage ---- */
+    #stage {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      transition: background .25s
+    }
+
+    #stage.leadin {
+      background: radial-gradient(circle at 50% 40%, rgba(96, 165, 250, .16), transparent 60%)
+    }
+
+    #stage.ready {
+      background: radial-gradient(circle at 50% 40%, rgba(251, 191, 36, .16), transparent 60%)
+    }
+
+    #stage.rec {
+      background: radial-gradient(circle at 50% 40%, rgba(52, 211, 153, .18), transparent 60%)
+    }
+
+    #stage.rest {
+      background: radial-gradient(circle at 50% 40%, rgba(139, 151, 173, .12), transparent 60%)
+    }
+
+    #stage.done {
+      background: radial-gradient(circle at 50% 40%, rgba(34, 211, 238, .16), transparent 60%)
+    }
+
+    #phase {
+      font-size: clamp(16px, 3vw, 26px);
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--muted)
+    }
+
+    #big {
+      font-size: clamp(34px, 7vw, 84px);
+      font-weight: 800;
+      line-height: 1.05;
+      margin: 10px 24px;
+      max-width: 18ch
+    }
+
+    #sub {
+      font-size: clamp(15px, 2.4vw, 24px);
+      color: var(--muted);
+      max-width: 30ch;
+      min-height: 1.4em
+    }
+
+    #timer {
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+      font-size: clamp(70px, 22vw, 260px);
+      line-height: 1;
+      margin: 6px 0
+    }
+
+    #stage.rec #timer {
+      color: var(--green)
+    }
+
+    #stage.ready #timer {
+      color: var(--amber)
+    }
+
+    #stage.leadin #timer {
+      color: var(--blue)
+    }
+
+    #stage.rest #timer {
+      color: var(--muted)
+    }
+
+    #recdot {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      color: var(--red);
+      font-weight: 800;
+      letter-spacing: .15em
+    }
+
+    #stage.rec #recdot {
+      display: flex
+    }
+
+    #recdot .dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--red);
+      animation: blink 1s steps(2) infinite
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: .15
+      }
+    }
+
+    #progress {
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: .1em
+    }
+
+    #controls {
+      position: fixed;
+      top: 14px;
+      right: 16px;
+      display: none;
+      gap: 10px
+    }
+
+    #controls button {
+      font-size: 14px;
+      padding: 8px 14px
+    }
+
+    /* ---- live telemetry strip ---- */
+    #live {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: none;
+      gap: 18px;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 8px 14px;
+      background: #0c121dcc;
+      border-top: 1px solid #1c2536;
+      font-size: 13px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums
+    }
+
+    #live b {
+      color: var(--txt);
+      font-weight: 700
+    }
+
+    #live .warn {
+      color: var(--amber)
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="setup">
+    <h1>Motion capture</h1>
+    <p>Records the raw foot &amp; body-sensor data for a set of labeled movements, so the
+      locomotion mapping can be built from what your steps <i>actually</i> look like.
+      Hit start, then go strap in and put the shoes on - a big lead-in timer counts you down
+      before the first action.</p>
+    <div class="row">
+      <label>lead-in seconds &nbsp;<input id="lead" type="number" value="45" min="5" max="600"></label>
+    </div>
+    <div class="row"><button class="go" id="startBtn">Start capture</button></div>
+    <p style="font-size:13px">Make sure the driver shows <b>streaming</b> first
+      (<a href="/" style="color:var(--line)">dashboard</a>). For each step action: <b>step out → pause →
+        let it slide back → pause → repeat</b> a few times.</p>
+    <ol class="seq" id="seqList"></ol>
+  </div>
+
+  <div id="controls">
+    <button id="skipBtn">Skip ▶</button>
+    <button id="abortBtn">Abort ✕</button>
+  </div>
+
+  <div id="stage">
+    <div id="phase">-</div>
+    <div id="big">-</div>
+    <div id="sub"></div>
+    <div id="timer">0</div>
+    <div id="recdot"><span class="dot"></span> RECORDING</div>
+    <div id="progress"></div>
+  </div>
+
+  <div id="live">
+    <span>device <b id="lvConn">-</b></span>
+    <span>speed <b id="lvSpeed">0</b></span>
+    <span>foot L <b id="lvL">0,0</b></span>
+    <span>foot R <b id="lvR">0,0</b></span>
+    <span>heading <b id="lvHd">0°</b></span>
+    <span>frames <b id="lvCount">0</b></span>
+    <span id="lvFile"></span>
+  </div>
+
+  <script>
+    // ===== the capture protocol - edit here to change actions/order/durations =====
+    const SEQ = [
+      { label: 'stand_still', banner: 'STAND STILL', sub: "feet at center - don't move", dur: 5 },
+      { label: 'forward_slow', banner: 'WALK FORWARD - SLOW', sub: 'gentle alternating steps', dur: 8 },
+      { label: 'forward_med', banner: 'WALK FORWARD - MEDIUM', sub: 'normal walking pace', dur: 8 },
+      { label: 'forward_fast', banner: 'WALK FORWARD - FAST / JOG', sub: 'quick steps', dur: 8 },
+      { label: 'back_step', banner: 'STEP BACKWARD', sub: 'one step back · pause · let it return · repeat', dur: 10 },
+      { label: 'left_Lfoot', banner: 'LEFT FOOT → STEP LEFT', sub: 'left foot only · out · pause · return · repeat', dur: 10 },
+      { label: 'right_Rfoot', banner: 'RIGHT FOOT → STEP RIGHT', sub: 'right foot only · out · pause · return · repeat', dur: 10 },
+      { label: 'diag_fl_Lfoot', banner: 'LEFT FOOT → FORWARD-LEFT', sub: 'diagonal single steps · pause between', dur: 8 },
+      { label: 'diag_fr_Rfoot', banner: 'RIGHT FOOT → FORWARD-RIGHT', sub: 'diagonal single steps · pause between', dur: 8 },
+      { label: 'turn_left', banner: 'TURN BODY LEFT (in place)', sub: "shuffle to rotate · don't travel", dur: 6 },
+      { label: 'turn_right', banner: 'TURN BODY RIGHT (in place)', sub: "shuffle to rotate · don't travel", dur: 6 },
+    ];
+    const READY = 3, REST = 3;   // seconds of get-ready before, and rest after, each action
+
+    const $ = id => document.getElementById(id);
+    let abort = false, skip = false;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const fmt = s => { s = Math.ceil(s); return s >= 60 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : String(s); };
+
+    // list the protocol on the setup screen
+    $('seqList').innerHTML = SEQ.map(a => `<li><b>${a.banner}</b> - ${a.sub} <i>(${a.dur}s)</i></li>`).join('');
+
+    function setStage(cls, phase, big, sub) {
+      $('stage').className = cls;
+      $('phase').textContent = phase;
+      $('big').textContent = big;
+      $('sub').textContent = sub || '';
+    }
+
+    // run a timed phase; updates the big timer ~12 Hz; returns 'done' | 'skip' | 'abort'
+    async function phase(seconds) {
+      const end = performance.now() + seconds * 1000;
+      while (true) {
+        if (abort) return 'abort';
+        if (skip) { skip = false; return 'skip'; }
+        const rem = (end - performance.now()) / 1000;
+        $('timer').textContent = fmt(Math.max(0, rem));
+        if (rem <= 0) return 'done';
+        await sleep(80);
+      }
+    }
+
+    async function run() {
+      const leadIn = Math.max(3, parseInt($('lead').value) || 45);
+      abort = false; skip = false;
+      $('setup').style.display = 'none';
+      $('stage').style.display = 'flex';
+      $('controls').style.display = 'flex';
+      $('live').style.display = 'flex';
+
+      setStage('leadin', 'lead-in', 'STRAP IN', 'get on the treadmill & put the shoes on');
+      if (await phase(leadIn) === 'abort') return finish(true);
+
+      for (let i = 0; i < SEQ.length; i++) {
+        const a = SEQ[i];
+        setStage('ready', `action ${i + 1} / ${SEQ.length}`, 'GET READY', a.banner);
+        $('progress').textContent = '';
+        if (await phase(READY) === 'abort') return finish(true);
+
+        // start recording this labeled segment (new file on the very first action)
+        try { await fetch('/record/start?new=' + (i === 0 ? 1 : 0) + '&label=' + encodeURIComponent(a.label)); } catch (e) { }
+        setStage('rec', `action ${i + 1} / ${SEQ.length}`, a.banner, a.sub);
+        $('progress').textContent = 'recording “' + a.label + '”';
+        const r = await phase(a.dur);
+        try { await fetch('/record/stop'); } catch (e) { }
+        if (r === 'abort') return finish(true);
+
+        if (i < SEQ.length - 1)
+          if (await (setStage('rest', 'rest', 'REST', 'next: ' + SEQ[i + 1].banner), phase(REST)) === 'abort') return finish(true);
+      }
+      finish(false);
+    }
+
+    function finish(aborted) {
+      try { fetch('/record/stop'); } catch (e) { }
+      $('controls').style.display = 'none';
+      setStage('done', aborted ? 'aborted' : 'complete',
+        aborted ? 'ABORTED' : 'DONE ✓',
+        aborted ? 'partial capture saved' : 'all actions captured');
+      $('timer').textContent = '';
+      $('progress').innerHTML = (lastFile ? 'saved to <b>' + lastFile + '</b>' : '') +
+        ' &nbsp;·&nbsp; <a href="/capture" style="color:var(--line)">run again</a>';
+    }
+
+    // ---- live telemetry + recorded-frame count ----
+    let lastFile = '';
+    async function poll() {
+      try {
+        const s = await (await fetch('/state')).json();
+        const conn = s.connected ? 'streaming' : (s.status || 'not streaming');
+        $('lvConn').textContent = conn;
+        $('lvConn').className = s.connected ? '' : 'warn';
+        $('lvSpeed').textContent = (s.speed || 0).toFixed(2);
+        $('lvL').textContent = (s.footL || [0, 0]).join(',');
+        $('lvR').textContent = (s.footR || [0, 0]).join(',');
+        $('lvHd').textContent = (s.heading || 0).toFixed(0) + '°';
+      } catch (e) { $('lvConn').textContent = 'daemon down'; $('lvConn').className = 'warn'; }
+      try {
+        const r = await (await fetch('/record/status')).json();
+        $('lvCount').textContent = r.count || 0;
+        if (r.file) { lastFile = r.file; $('lvFile').innerHTML = 'file <b>' + r.file.split('/').pop() + '</b>'; }
+      } catch (e) { }
+    }
+    setInterval(poll, 200); poll();
+
+    $('startBtn').onclick = run;
+    $('skipBtn').onclick = () => { skip = true; };
+    $('abortBtn').onclick = () => { abort = true; };
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Start katwalk-linux: the daemon (treadmill -> the installed driver) plus the in-VR overlay.
+# Daemon defaults do everything (publish to the driver + head-relative); no flags needed.
+# Needs the .venv and SteamVR already running. One-time setup (venv, udev rules, driver
+# install) is in the README. Ctrl-C stops BOTH cleanly (daemon sleeps the device, overlay
+# releases its overlay key) before the prompt returns, so an immediate re-run does not collide.
+cd "$(dirname "$0")"
+
+PY=.venv/bin/python
+if [ ! -x "$PY" ]; then
+  echo "No .venv found. First-time setup:"
+  echo "  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+  exit 1
+fi
+
+echo "katwalk-linux: daemon + overlay starting. Web tuner: http://localhost:8770  (Ctrl-C to stop)"
+"$PY" -m katwalk.daemon &
+daemon=$!
+"$PY" -m katwalk.overlay &
+overlay=$!
+
+cleanup() {
+  trap - INT TERM                              # don't re-enter while tearing down
+  # Ask both to stop the clean way (daemon sleeps the device ~5s; overlay frees its key).
+  kill -INT "$daemon" "$overlay" 2>/dev/null || true
+  # Wait up to ~9s for a real exit; only then force-kill whatever is stuck.
+  for _ in $(seq 1 90); do
+    kill -0 "$daemon" 2>/dev/null || kill -0 "$overlay" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -KILL "$daemon" "$overlay" 2>/dev/null || true
+  wait 2>/dev/null || true
+}
+trap cleanup INT TERM
+wait

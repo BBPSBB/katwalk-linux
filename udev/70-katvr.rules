@@ -1,0 +1,16 @@
+# KAT Walk C2+ (plusE): let the local user access the KATVR HID devices (VID c4f4) so the
+# katwalk tools run without sudo.
+#
+# HEADS UP: VID c4f4 is what enumerated on ONE unit (mine), tested once on Bazzite/Fedora.
+# Your unit, firmware, or distro may differ. Check `lsusb` and docs/HARDWARE.md; if the vendor
+# id is different, edit idVendor below, and please open an issue so we can widen support.
+#
+#   TAG+="uaccess" lets systemd-logind grant the logged-in user an ACL on the node.
+#   MODE 0660 is a fallback for non-logind setups.
+#   hidraw rule: the sensor read/write stream.
+#   usb rule: access to the /dev/bus/usb node, needed for the HID SET_IDLE control transfer
+#     that sleeps the base/armband on a clean shutdown (docs/PLUSE-PROTOCOL.md).
+# Install: sudo install -m644 udev/70-katvr.rules /etc/udev/rules.d/70-katvr.rules
+#          sudo udevadm control --reload && sudo udevadm trigger
+KERNEL=="hidraw*", ATTRS{idVendor}=="c4f4", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="c4f4", MODE="0660", TAG+="uaccess"

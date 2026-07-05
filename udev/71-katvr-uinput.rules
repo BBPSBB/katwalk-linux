@@ -1,0 +1,9 @@
+# Let the local user create virtual input devices (the katwalk virtual gamepad)
+# without sudo. /dev/uinput is normally root-only.
+#   TAG+="uaccess" -> systemd-logind grants the logged-in user an ACL.
+#   static_node ensures /dev/uinput exists with the right mode even before first use.
+# If /dev/uinput is missing entirely, load the module: sudo modprobe uinput
+# (persist with: echo uinput | sudo tee /etc/modules-load.d/uinput.conf)
+# Install: sudo install -m644 udev/71-katvr-uinput.rules /etc/udev/rules.d/71-katvr-uinput.rules
+#          sudo udevadm control --reload && sudo udevadm trigger
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", TAG+="uaccess", OPTIONS+="static_node=uinput"
