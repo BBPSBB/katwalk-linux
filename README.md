@@ -104,6 +104,18 @@ body, not your gaze) is the default, so the daemon needs no flags for normal use
 `--output {vr,gamepad,none}` (default `vr`; `gamepad` drives a virtual Xbox pad, `none` disables
 output) and `--port`.
 
+### Device detection (any C2 variant)
+
+The daemon finds the treadmill by role name, not a fixed USB id, so it works across C2 variants
+whose receiver has a different product id (C2 core `3f37`, C2+ `2f37`, this author's unit `3f12`,
+and so on). If it can't find your device, or you have several units attached and want to pin a
+specific one, run the setup wizard, which lists what it sees and lets you pick:
+```sh
+.venv/bin/python -m katwalk.configure       # interactive; or --auto to just accept detection
+```
+It saves your choice (pinned by serial) to `~/.config/katwalk/device.json`. If your unit doesn't
+show up at all, check `lsusb | grep c4f4` and open an issue with the output.
+
 ### Just poking at the sensors (no VR)
 
 Run with `--output none` and open the web page in a browser. Heads up, this web UI is crude

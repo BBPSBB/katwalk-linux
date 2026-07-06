@@ -25,32 +25,29 @@ import time
 VID = "c4f4"
 USBDEVFS_CONTROL = 0xC0185500
 USBDEVFS_DISCONNECT_CLAIM = 0x8108551B
-PIDS = ("3f12", "bf12", "bf13")  # receiver, base/seat, armband
 
 
-def usb_node(pid):
+def usb_nodes():
+    """/dev/bus/usb paths for EVERY c4f4 (KATVR) device - any variant/pid (receiver, base,
+    armband). Product ids differ across C2 variants, so match on the vendor id only."""
+    nodes = []
     for d in glob.glob("/sys/bus/usb/devices/*"):
         try:
-            if open(d + "/idVendor").read().strip() != VID:
+            if open(d + "/idVendor").read().strip().lower() != VID:
                 continue
-            if open(d + "/idProduct").read().strip().lower() != pid:
-                continue
-            return "/dev/bus/usb/%03d/%03d" % (
-                int(open(d + "/busnum").read()),
-                int(open(d + "/devnum").read()),
+            nodes.append(
+                "/dev/bus/usb/%03d/%03d"
+                % (int(open(d + "/busnum").read()), int(open(d + "/devnum").read()))
             )
         except OSError:
             continue
-    return None
+    return nodes
 
 
 def main():
     hold = float(sys.argv[1]) if len(sys.argv) > 1 else 12.0
     held = []
-    for pid in PIDS:
-        node = usb_node(pid)
-        if not node:
-            continue
+    for node in usb_nodes():
         try:
             fd = os.open(node, os.O_RDWR)
             # detach usbhid + claim iface0 (stops the polling; also lets SET_IDLE through)

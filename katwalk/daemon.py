@@ -42,11 +42,8 @@ from katwalk.config import (
     delete_profile,
 )
 from katwalk.io.driverlink import StickWriter  # noqa: E402
+from katwalk.io import devices  # noqa: E402
 
-VID = "0000C4F4"
-PID_RX = "00003F12"
-PID_SEAT = "0000BF12"
-PID_ARM = "0000BF13"  # armband (optical heart rate)
 FRAME = 32
 INIT = (
     bytes((0x1F, 0x55, 0xAA, 0, 0, 0x31)),
@@ -80,35 +77,7 @@ REC_KINDS = {
 }
 
 
-def find(pid: str):
-    for n in sorted(Path("/sys/class/hidraw").glob("hidraw*")):
-        try:
-            t = (n / "device" / "uevent").read_text().upper()
-        except OSError:
-            continue
-        if VID in t and pid in t:
-            return f"/dev/{n.name}"
-    return None
-
-
 SLEEPER = str(Path(__file__).resolve().parent / "io" / "sleeper.py")
-
-
-def usb_node(pid_hex: str):
-    """/dev/bus/usb path for a c4f4 device (for usbfs control transfers)."""
-    for d in glob.glob("/sys/bus/usb/devices/*"):
-        try:
-            if open(d + "/idVendor").read().strip() != "c4f4":
-                continue
-            if open(d + "/idProduct").read().strip().lower() != pid_hex:
-                continue
-            return "/dev/bus/usb/%03d/%03d" % (
-                int(open(d + "/busnum").read()),
-                int(open(d + "/devnum").read()),
-            )
-        except OSError:
-            continue
-    return None
 
 
 def kill_sleeper() -> None:
@@ -133,13 +102,11 @@ def kill_sleeper() -> None:
 
 
 def rebind_usbhid() -> None:
-    """Ensure usbhid is bound to all three c4f4 devices (USBDEVFS_CONNECT via usbfs). An
-    interrupted sleeper can leave them detached with no hidraw - this recovers the device
-    without a replug or root. No-op (errors ignored) if already bound."""
-    for pid in ("3f12", "bf12", "bf13"):
-        node = usb_node(pid)
-        if not node:
-            continue
+    """Ensure usbhid is bound to every c4f4 device (USBDEVFS_CONNECT via usbfs). An interrupted
+    sleeper can leave them detached with no hidraw - this recovers the device without a replug or
+    root. Works on any variant (all KATVR usb nodes). No-op (errors ignored) if already bound.
+    """
+    for node in devices.c4f4_usb_nodes():
         try:
             ufd = os.open(node, os.O_RDWR)
             try:
@@ -303,22 +270,31 @@ class Receiver(threading.Thread):
 
     def run(self):
         kill_sleeper()  # clear a leftover background sleeper, if any
-        rx, seat = find(PID_RX), find(PID_SEAT)
-        if not rx:  # ONLY touch usbhid when the receiver hidraw is missing
+        # Resolve devices by ROLE (works on any C2 variant, whatever the product id), honoring a
+        # pinned selection from `python -m katwalk.configure`. See katwalk/io/devices.py.
+        rxdev = devices.resolve("receiver")
+        seatdev = devices.resolve("seat")
+        if rxdev is None:  # ONLY touch usbhid when the receiver hidraw is missing
             rebind_usbhid()  # (detached by an interrupted sleep) - never on a healthy
             for _ in range(24):  # start, so a working device is never disrupted.
                 time.sleep(0.25)
-                rx, seat = find(PID_RX), find(PID_SEAT)
-                if rx:
+                rxdev = devices.resolve("receiver")
+                if rxdev:
                     break
-        if not rx:
+            seatdev = devices.resolve("seat")
+        if rxdev is None:
             self.latest = {
                 "connected": False,
-                "status": "receiver c4f4:3f12 not found - base on? hub authorized?",
+                "status": "No KATVR receiver found - base on? hub authorized? "
+                "If your unit is a different C2 variant, run: python -m katwalk.configure",
             }
             return
+        print(f"receiver: {rxdev.name} (c4f4:{rxdev.pid.lower()})")
+        rx = rxdev.path
+        seat = seatdev.path if seatdev else None
         sfd = os.open(seat, os.O_RDWR | os.O_NONBLOCK) if seat else None
-        arm = find(PID_ARM)  # armband (heart rate): optional
+        armdev = devices.resolve("armband")  # armband (heart rate): optional
+        arm = armdev.path if armdev else None
         afd = os.open(arm, os.O_RDWR | os.O_NONBLOCK) if arm else None
         # Output setup (gamepad / OpenVR / shmem) FIRST. These can take a second or two
         # (OpenVR init especially) and MUST NOT sit between the connect handshake and the

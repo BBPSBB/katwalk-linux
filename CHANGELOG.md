@@ -10,6 +10,10 @@ First public pre-alpha: a from-scratch native-Linux driver and stack for the KAT
 "plusE" VR treadmill. No Wine, no KAT Gateway. Tested on a single unit.
 
 ### Added
+- Variant-agnostic device detection: finds the treadmill by role name (`receiver` / `position` /
+  `armband` in the HID name) rather than a fixed USB product id, so it works across C2 variants
+  (C2 core `3f37`, C2+ `2f37`, etc.). A `python -m katwalk.configure` wizard lists what it sees and
+  pins a specific unit (by serial) when detection needs help.
 - USB sensor decoding for the receiver: body-orientation quaternion, per-foot optical slip
   position, per-sensor battery and firmware, and armband heart rate.
 - Locomotion model: speed from the grounded foot's optical slip velocity, body-relative
