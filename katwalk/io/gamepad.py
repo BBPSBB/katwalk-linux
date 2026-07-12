@@ -7,7 +7,7 @@ a standard controller. Map per the Gateway: left stick = walk vector, L3 = sprin
 Needs write access to /dev/uinput: install udev/71-katvr-uinput.rules (or run as root).
 If /dev/uinput is missing: sudo modprobe uinput.
 
-The main path is the VR drivers fed over shared memory (openvr-driver/, openxr-driver/);
+The main path is the OpenXR layer fed over shared memory (openxr-driver/);
 this gamepad is a simpler alternative output for flatscreen/gamepad games.
 """
 

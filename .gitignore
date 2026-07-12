@@ -8,6 +8,6 @@ venv
 *.log
 *.bin
 recordings
-openvr-driver/katwalk/bin
 openxr-driver/bin/
 dev
+.ruff_cache

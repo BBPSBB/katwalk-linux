@@ -1,7 +1,6 @@
 """Shared-memory stick I/O between katwalkd and the OpenVR driver / OpenXR layer.
 
-Layout (little-endian, matches `struct KatInput` in openvr-driver/src/driver_katwalk.cpp
-and openxr-driver/src/layer.cpp):
+Layout (little-endian, matches `struct KatInput` in openxr-driver/src/katwalk_shm.h):
     float x, float y, uint32 buttons, uint32 seq         # 16 bytes
 buttons: bit0 = sprint, bit1 = jump.
 

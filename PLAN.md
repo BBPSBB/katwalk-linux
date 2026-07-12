@@ -1,7 +1,7 @@
 # katwalk-linux - plan and roadmap
 
 Native Linux locomotion for the KAT Walk C2+ ("plusE") VR treadmill: read the sensors directly,
-turn walking into a thumbstick, and drive SteamVR and OpenXR on Linux. No Wine, no Windows, no
+turn walking into a thumbstick, and drive OpenXR games on Linux. No Wine, no Windows, no
 KAT Gateway.
 
 This started as a phased plan (recon, decode the protocol, fusion, output, native driver). Those
@@ -21,20 +21,21 @@ The whole pipeline works end to end. The feel is still rough, see the README sta
   detection. Direction is body relative: you move where your body faces and can look around while
   walking. Also has per-direction sensitivity, a linear-vs-constant speed mode, and an optional
   cruise (auto-walk).
-- **Head decoupling** (`katwalk/core/fusion.py`). HMD yaw is read from OpenVR and subtracted, so
+- **Head decoupling** (`katwalk/core/fusion.py`). HMD yaw is read from the OpenXR layer (over
+  shared memory) and subtracted, so
   movement follows your body instead of your gaze. Validated in a real game: recenter facing
   forward, then look anywhere and walking still goes where your body points.
-- **Outputs.** A native OpenVR driver (`openvr-driver/`) that registers a treadmill-role device exposing
-  a joystick, fed by the daemon over shared memory. Also an OpenXR API-layer driver (`openxr-driver/`) and
-  a uinput virtual gamepad as alternative paths.
+- **Outputs.** An OpenXR API-layer driver (`openxr-driver/`) fed by the daemon over shared memory,
+  plus a uinput virtual gamepad as an alternative path. (An experimental OpenVR treadmill-role
+  driver existed early on and was removed - one maintained path.)
 - **Daemon** (`katwalk/daemon.py`). Reads the device over hidraw, runs the model, feeds the
   outputs, and serves the web tuner. Tuned params persist to a config file with named profiles.
-- **In-VR overlay** (`katwalk/overlay.py`). A wrist HUD with the foot-sensor pads, body heading,
-  the final stick output, live tuning sliders, and recenter.
+- **In-VR overlay** (`katwalk/overlay_xr.py` + the layer). A wrist HUD with the foot-sensor pads,
+  body heading, the final stick output, live tuning, drag-to-place, and recenter.
 
 The code is organized as: `katwalk/core/` (the logic: parsing, the model, fusion), `katwalk/io/`
-(device and output adapters), `katwalk/daemon.py` and `katwalk/overlay.py` (the two apps), `openvr-driver/`
-and `openxr-driver/` (the C++ pieces), and `dev/` (capture and debug scripts). `./run` starts the
+(device and output adapters), `katwalk/daemon.py` and `katwalk/overlay_xr.py` (the two apps),
+`openxr-driver/` (the C++ layer), and `dev/` (capture and debug scripts). `./run` starts the
 daemon and overlay together.
 
 ## What is left
@@ -62,8 +63,6 @@ Later, the nice-to-haves:
 
 - Body-relative direction is validated in one game (head-relative locomotion). Games that handle
   locomotion differently (controller-relative) may need a different mapping; not tested yet.
-- SteamVR can crash during wireless headset streaming on the test rig. That is a streaming and
-  Vulkan issue on the host, not this driver, but it makes testing annoying.
 - The waist sensor sits on a loose belt and under-rotates on small turns, so the body heading is
   not a perfect measure of actual body yaw.
 

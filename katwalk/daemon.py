@@ -12,6 +12,7 @@ Run:  .venv/bin/python -m katwalk.daemon        then open http://localhost:8770
 from __future__ import annotations
 
 import argparse
+import errno
 import fcntl
 import glob
 import json
@@ -32,7 +33,8 @@ from katwalk.core.parser import HEADER, parse  # noqa: E402
 from katwalk.core.locomotion import LocomotionModel  # noqa: E402
 from katwalk.core.fusion import stick_from_state  # noqa: E402
 from katwalk.io.gamepad import VirtualGamepad  # noqa: E402
-from katwalk.io.openvr_pose import HmdYaw  # noqa: E402
+from katwalk.io.xr_pose import HmdYaw  # noqa: E402
+from katwalk import __version__  # noqa: E402
 from katwalk.config import (
     load_params,
     save_params,
@@ -57,8 +59,9 @@ POLL = bytes(
 VIB_OFF = bytes((0x1F, 0x55, 0xAA, 0, 0, 0xA0, 0x00, 0x02, 0x00, 0x00))
 # Short base-motor buzz to CONFIRM a recenter (KAT's app vibrates on recenter too). Uses the
 # a1 vibration command, NOT the a0 form above - a0 is sleep/vib-stop and would risk sleeping
-# the device mid-session. Intensity 0x0341 ~= level 5 (per the protocol capture); off = 0x0000.
-VIB_PULSE_ON = bytes((0x1F, 0x55, 0xAA, 0, 0, 0xA1, 0x00, 0x02, 0x03, 0x41))
+# the device mid-session. Intensity 0x00A6 = level 1 of 5 (protocol capture: intensity=level*166;
+# level 5 = 0x0341 shook the whole floor) - a confirmation tick, not an earthquake. Off = 0x0000.
+VIB_PULSE_ON = bytes((0x1F, 0x55, 0xAA, 0, 0, 0xA1, 0x00, 0x02, 0x00, 0xA6))
 VIB_PULSE_OFF = bytes((0x1F, 0x55, 0xAA, 0, 0, 0xA1, 0x00, 0x02, 0x00, 0x00))
 STOP = bytes((0x1F, 0x55, 0xAA, 0, 0, 0x31))
 RECOVERY_ATTEMPTS = (
@@ -316,18 +319,19 @@ class Receiver(threading.Thread):
             except Exception as e:
                 print("VR output disabled:", e)
         # Head yaw makes walking body-relative rather than gaze-relative - essential once a
-        # VR driver is the target. Skipped in 'none' mode. Degrades gracefully without SteamVR.
+        # VR driver is the target. Skipped in 'none' mode. Yaw comes from the OpenXR layer's
+        # shared memory (any OpenXR runtime); degrades gracefully when no game is running.
         hmd = None
         if self.output != "none":
             hmd = HmdYaw()
             if hmd.start():
                 print("HMD yaw ON (head-relative direction)")
             else:
-                # KEEP the HmdYaw object even though it isn't up yet - poll() reconnects on its
-                # own when SteamVR/the headset appears (starting the daemon before the headset
-                # must NOT leave head-relative dead forever). Body-heading only until then.
+                # KEEP the HmdYaw object even though it isn't up yet - poll() re-attaches on
+                # its own once an OpenXR game starts (the layer creates the shm). Starting the
+                # daemon first must NOT leave head-relative dead forever.
                 print(
-                    "HMD yaw not up yet (SteamVR/headset?) - reconnecting; body-heading for now"
+                    "HMD yaw not up yet (no OpenXR game running) - body-heading for now"
                 )
 
         # Connect + self-heal. Init (31,05,21,31) then a brief QUIET so the sensors settle to
@@ -671,7 +675,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "application/json", json.dumps({"ok": True}).encode())
         elif u.path == "/state":
             self._send(
-                200, "application/json", json.dumps(self.receiver.latest).encode()
+                200,
+                "application/json",
+                json.dumps({**self.receiver.latest, "version": __version__}).encode(),
             )
         elif u.path == "/stream":
             self.send_response(200)
@@ -693,7 +699,7 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Read the KAT Walk C2+ and publish locomotion. By default it feeds "
-        "the installed VR driver (openvr-driver / openxr-driver) over shared memory."
+        "the OpenXR layer (openxr-driver/) over shared memory."
     )
     ap.add_argument("--port", type=int, default=8770, help="web tuner port")
     ap.add_argument(
@@ -707,18 +713,32 @@ def main() -> int:
     args = ap.parse_args()
 
     model = LocomotionModel(load_params())
+    # Bind the port BEFORE touching the device: if another daemon already owns it, exit
+    # with a clear message instead of a traceback (and without contending for the hardware).
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError as e:
+        if e.errno == errno.EADDRINUSE:
+            print(
+                f"katwalkd: port {args.port} is already in use - another daemon instance is "
+                "probably running.\n"
+                "  Stop it first:  pkill -INT -f katwalk.daemon   (clean stop; sleeps the device)\n"
+                f"  Or run this one on another port:  --port {args.port + 1}",
+                file=sys.stderr,
+            )
+            return 1
+        raise
     rcv = Receiver(model, output=args.output)
     rcv.start()
     Handler.model = model
     Handler.receiver = rcv
-    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     mode = {
         "vr": "VR driver output",
         "gamepad": "gamepad output",
         "none": "sensor viewer",
     }[args.output]
     print(
-        f"katwalk-linux tuner ({mode}) → http://localhost:{args.port}    (Ctrl-C / SIGTERM to stop; device sleeps on exit)"
+        f"katwalk-linux v{__version__} tuner ({mode}) → http://localhost:{args.port}    (Ctrl-C / SIGTERM to stop; device sleeps on exit)"
     )
     # Run the HTTP server in a thread and block on a stop event the signal handler sets.
     # (Relying on KeyboardInterrupt to break serve_forever is unreliable when launched

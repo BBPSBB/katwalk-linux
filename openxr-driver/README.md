@@ -1,7 +1,9 @@
 # katwalk-linux OpenXR driver (`openxr-driver/`)
 
-One of the two interchangeable game injectors (the other is `../openvr-driver/`). This is the path
-that has actually been used to drive games, so prefer it.
+The game injector: the single VR-facing native component of katwalk-linux. It injects locomotion
+into games AND displays the in-VR wrist HUD (rendered by `katwalk/overlay_xr.py`, shipped over
+shared memory). Works on any OpenXR runtime - WiVRn, Monado, or SteamVR's OpenXR; OpenVR games
+reach it through an OpenVR-to-OpenXR shim (xrizer / OpenComposite).
 
 Technically this is an OpenXR **implicit API layer** ("driver" here just means the thing that feeds
 locomotion into a game). It loads into every OpenXR app, native and Proton, and injects the walk

@@ -2,7 +2,7 @@
 
 Native Linux locomotion for the KAT Walk C2+ ("plus Enhanced" / "plusE") VR treadmill. It reads
 the shoe and body sensors over USB, turns your walking into a thumbstick, and feeds that into
-SteamVR and OpenXR. No Wine, no Windows, no KAT Gateway.
+your OpenXR games. No Wine, no Windows, no KAT Gateway.
 
 > **Status: pre-alpha, and genuinely rough.** The core works: it connects to the treadmill,
 > decodes the sensors, and drives locomotion in real games. But this is a work in progress held
@@ -22,10 +22,11 @@ your `lsusb` output and what you see. That is how this gets more general.
 ## What you need
 
 - A KAT Walk C2+ (the "plusE" variant) plugged in over USB.
-- Linux with SteamVR working in your headset. This was built on Bazzite/Fedora with a Quest over
-  wireless streaming. Other setups should work but are untested.
+- Linux with any OpenXR runtime driving your headset (WiVRn, Monado, or SteamVR's OpenXR).
+  This was built on Bazzite/Fedora with a Quest over WiVRn. Other setups should work but are
+  untested.
 - Python 3.
-- A C++ toolchain (`g++`, `make`) to build a driver (the OpenXR or OpenVR game injector). On an
+- A C++ toolchain (`g++`, `make`) to build the OpenXR layer (the game injector). On an
   immutable distro like Bazzite, do the builds inside a `distrobox`/`toolbox` that has them,
   not by layering packages onto the host.
 
@@ -40,8 +41,8 @@ git clone https://github.com/BBPSBB/katwalk-linux
 cd katwalk-linux
 ```
 
-**2. Python environment.** The daemon core is stdlib only; this venv covers the VR-facing pieces
-(the in-VR overlay, HMD pose, the driver feed). The overlay is pure Python, nothing to compile.
+**2. Python environment.** The daemon core is stdlib only; the venv adds Pillow (HUD rendering)
+and pyusb (device wake). The overlay is pure Python, nothing to compile.
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
@@ -55,54 +56,77 @@ sudo udevadm control --reload && sudo udevadm trigger
 ```
 
 **4. Get walking into your games.** The daemon computes a thumbstick vector and publishes it over
-shared memory; a *driver* (a game injector) reads it and feeds the game. There are two
-interchangeable drivers doing the same job. The **OpenXR driver** is the one actually developed and
-tested against, so use it; the **OpenVR driver** is an experimental alternative. Build only the one
-you need (each compiles with the C++ toolchain from above and statically links libstdc++/libgcc so
-the `.so` loads cleanly).
-
-*The OpenXR driver* (an implicit OpenXR API layer that injects the left thumbstick into every
-OpenXR game, Proton included, with no in-game binding):
+shared memory; the **OpenXR layer** (an implicit API layer that loads into every OpenXR game,
+Proton included) reads it and injects it into the left thumbstick - no in-game binding needed. The
+same layer draws the in-VR HUD. It compiles with the C++ toolchain from above (plus the
+`vulkan-headers` and `openxr` dev headers; see the toolchain note about building inside a
+distrobox/toolbox on immutable distros) and statically links libstdc++/libgcc:
 ```sh
 cd openxr-driver && make   # builds bin/libkatwalk_xr_layer.so
 ./install.sh               # installs it as a per-user implicit layer
 cd ..
 ```
-It attaches when the game launches. Turn it off without uninstalling with
-`export DISABLE_KATWALK_XR_LAYER=1`.
+`make` refuses to build without those headers and tells you what to install. It attaches when the
+game launches. Turn it off without uninstalling with `export DISABLE_KATWALK_XR_LAYER=1`.
 
-*The OpenVR driver (experimental, optional)* registers a treadmill-role device inside SteamVR. It
-builds and registers, but it has not been verified driving a live session and SteamVR can safe-mode
-block it after any crash. Only bother with it for older games that use OpenVR input directly and
-never OpenXR:
-```sh
-cd openvr-driver && make   # builds katwalk/bin/linux64/driver_katwalk.so
-./install.sh               # registers it with SteamVR via vrpathreg
-cd ..
-```
-Restart SteamVR afterwards, then bind **katwalk-linux** (the treadmill source) to your game's walk
-action in the SteamVR controller bindings. You do not need this if the OpenXR driver covers your
-games.
+(An experimental OpenVR treadmill-role driver used to live in this repo as an alternative path; it
+was removed to keep one maintained path. OpenVR games work through the same OpenXR layer when run
+via an OpenVR-to-OpenXR shim such as xrizer or OpenComposite.)
 
 ## Running it
 
-With SteamVR running, the base on, and the shoes and rotating base powered so they stream:
+With the base on, and the shoes and rotating base powered so they stream:
 ```sh
 ./run
 ```
-That starts both pieces: the daemon (treadmill to the injector over shared memory) and the in-VR
-overlay (the wrist HUD where you recenter and tune). Launch your game, stand facing forward,
-recenter from the overlay, and walk. Ctrl-C stops both and sleeps the device cleanly.
+That starts both pieces: the daemon (treadmill to the OpenXR layer over shared memory) and the
+overlay runner (the wrist HUD where you recenter and tune - it appears inside whatever OpenXR
+game you launch). Stand facing forward, recenter, and walk. Ctrl-C stops both and sleeps the
+device cleanly. HUD placement/gating lives in `~/.config/katwalk/hud.conf`: drag the panel
+in-VR (point the other hand, hold grip) or edit the file - it reloads live.
 
 To run them separately in two terminals instead:
 ```sh
-.venv/bin/python -m katwalk.daemon     # reads the treadmill, feeds the installed driver
-.venv/bin/python -m katwalk.overlay    # the in-VR overlay
+.venv/bin/python -m katwalk.daemon     # reads the treadmill, feeds the OpenXR layer
+.venv/bin/python -m katwalk.overlay_xr # the in-VR overlay (frames + clicks via the layer)
 ```
-Publishing to the driver over shared memory (and reading your head yaw so movement follows your
+Publishing the stick to the OpenXR layer over shared memory (and reading your head yaw so movement follows your
 body, not your gaze) is the default, so the daemon needs no flags for normal use. The only knobs:
 `--output {vr,gamepad,none}` (default `vr`; `gamepad` drives a virtual Xbox pad, `none` disables
 output) and `--port`.
+
+### Getting it into your game (native vs. Proton)
+
+`./run` starts the daemon and the overlay, but how they reach a *game* depends on how that game is
+sandboxed:
+
+- **Native Linux OpenXR games**: nothing extra. The implicit layer loads automatically and reads
+  katwalk's shared memory directly. Launch the game and the wrist overlay appears; walking drives
+  the thumbstick.
+- **Proton games (Steam, Heroic/umu, ...)**: these run inside the Steam Linux Runtime container
+  (pressure-vessel), which by default hides two things the game needs from the host:
+  1. **your headset's OpenXR runtime** (WiVRn, Monado, ...) - without it the game can't enter VR
+     at all, and usually opens flatscreen on the desktop;
+  2. **katwalk's runtime dir `/tmp/katwalk`** - the channel the overlay frames, the pointer
+     clicks, and the locomotion stick travel through into the sandbox.
+
+  You expose both in the game's launch options. With Steam's `%command%` placeholder:
+  ```
+  PRESSURE_VESSEL_IMPORT_OPENXR_1_RUNTIMES=1 PRESSURE_VESSEL_FILESYSTEMS_RW=/tmp/katwalk %command%
+  ```
+  `IMPORT_OPENXR_1_RUNTIMES` pulls your active OpenXR runtime into the container;
+  `FILESYSTEMS_RW` bind-mounts paths in (colon-separated). If your runtime is itself a flatpak
+  (WiVRn is), its socket lives in the flatpak's data dir, so add that dir to the list too:
+  ```
+  PRESSURE_VESSEL_FILESYSTEMS_RW=/path/to/your/runtime/dir:/tmp/katwalk
+  ```
+  Your runtime's own setup guide usually gives you the exact import string to paste; treat the
+  above as the shape of it. Heroic/umu use the same pressure-vessel variables; set them as
+  environment variables on the game rather than via `%command%`.
+
+If a Proton game launches flatscreen, or into VR but with no overlay and no walking, it is almost
+always one of these two exports missing (the container hiding the runtime or `/tmp/katwalk`), not a
+katwalk bug.
 
 ### Device detection (any C2 variant)
 
@@ -132,14 +156,13 @@ katwalk/daemon.py (the daemon)
         |
         +-- web tuner + live sliders (katwalk/web/tuner.html)
         +-- output (--output, default vr):
-              vr       -> shared-memory stick file, read by whichever driver you installed:
-                            openxr-driver/  an OpenXR implicit layer (the tested path; Proton too)
-                            openvr-driver/  an OpenVR treadmill-role device (experimental)
+              vr       -> shared-memory stick file, read by the OpenXR layer (openxr-driver/)
               gamepad  -> a virtual Xbox pad (uinput)
               none     -> nothing; just the web tuner
 
-  katwalk/overlay.py : separate in-VR overlay. Polls /state, draws the two foot pads, the body
-                        heading, and the final stick output, plus recenter and live tuning.
+  katwalk/overlay_xr.py : the in-VR overlay runner. Polls /state, ships rendered frames to the
+                        OpenXR layer over shared memory, and feeds laser clicks back into the
+                        tabs/steppers. katwalk/overlay.py is the pure-Pillow renderer it uses.
 ```
 
 - Speed comes from how fast the grounded foot slides on the deck (optical slip velocity), low-pass
@@ -150,32 +173,29 @@ katwalk/daemon.py (the daemon)
   forward.
 
 For the driver internals see [openxr-driver/README.md](openxr-driver/README.md) and
-[openvr-driver/README.md](openvr-driver/README.md).
 
 ## What works, what is rough
 
-- Works: connect and sensor decode, speed, body-relative direction (look around freely), the in-VR
-  overlay with live tuning, the OpenXR driver injecting locomotion into real games, cruise mode,
-  per-direction sensitivity.
-- Experimental: the OpenVR driver builds and registers but is unverified in a live session, and
-  SteamVR can safe-mode block it after a crash. The OpenXR driver is the path to use.
+- Works: connect and sensor decode, speed, body-relative direction (look around freely), the OpenXR
+  layer injecting locomotion into real games, and the in-VR wrist overlay - live tuning, recenter,
+  drag-to-place, a cursor-dot pointer for clicking, and a look-at-wrist show/hide gesture. Cruise
+  mode and per-direction sensitivity too.
 - Rough: the web tuner UI is crude debugging scaffolding, and `dev/` is a pile of capture and
   one-off debug scripts. Speed feel needs per-user tuning, and it has only been exercised on one
-  unit. If SteamVR crashes during wireless streaming, that is a streaming/Vulkan issue on the
-  host, not this project.
+  unit.
 
 ## Layout
 
 ```
 katwalk/          the product code
   core/           the logic: parser (sensor decode), locomotion (speed + direction), fusion (heading + stick)
-  io/             adapters: gamepad, openvr_pose, driverlink (shared-mem to the driver), sleeper
+  io/             adapters: gamepad, xr_pose (HMD yaw from the layer), driverlink (shared-mem), sleeper
   daemon.py       the runtime: reads the treadmill, runs the model, feeds the outputs + web tuner
-  overlay.py      the in-VR HUD
+  overlay.py      the HUD renderer (pure Pillow)
+  overlay_xr.py   the in-VR HUD runner (shared memory to/from the OpenXR layer)
   config.py       tuning params + named profiles
   web/            web tuner UI
 openxr-driver/    game injector: OpenXR API-layer (C++) - the one used in practice
-openvr-driver/    game injector: OpenVR treadmill-role driver (C++) - experimental alternative
 dev/              capture + debug scripts (not needed to run it)
 udev/             HID + uinput access rules
 docs/             hardware, protocol, USB-noise notes (all N=1)
@@ -194,5 +214,5 @@ locomotion setting (smooth head-relative vs controller-relative).
 
 ## License
 
-GPLv3, see [LICENSE](LICENSE). A few permissively-licensed third-party headers (OpenVR, OpenXR)
+GPLv3, see [LICENSE](LICENSE). A few permissively-licensed third-party headers (OpenXR)
 are bundled for a self-contained build, see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

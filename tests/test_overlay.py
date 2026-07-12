@@ -1,13 +1,11 @@
 """Tests for the in-VR overlay HUD (katwalk/overlay.py).
 
-Covers rendering for every state, the demo-mode animation, and - crucially - the
-ctypes buffer conversion that pyopenvr's setOverlayRaw requires (the bug where passing
-raw bytes blew up with 'byref() argument must be _ctypes._CData, not bytes').
+Covers rendering for every state and the demo-mode animation (the renderer is pure
+Pillow - the OpenXR layer handles display/anchoring, see katwalk/overlay_xr.py).
 
 Run:  .venv/bin/python -m unittest discover -s tests
 """
 
-import ctypes
 import importlib.util
 import os
 import unittest
@@ -63,22 +61,6 @@ class RenderTests(unittest.TestCase):
 
     def test_tobytes_length(self):
         self.assertEqual(len(vo.render(WALK, self.fonts).tobytes()), vo.W * vo.H * 4)
-
-
-class OverlayBufferTests(unittest.TestCase):
-    """Regression: setOverlayRaw -> byref() needs a ctypes object, not bytes."""
-
-    def setUp(self):
-        self.fonts = vo.load_fonts()
-
-    def test_buffer_is_ctypes_and_byref_succeeds(self):
-        buf = vo.to_overlay_buffer(vo.render(WALK, self.fonts))
-        self.assertEqual(len(bytes(buf)), vo.W * vo.H * 4)
-        ctypes.byref(buf)  # exactly what pyopenvr does internally - must not raise
-
-    def test_buffer_roundtrips_image_bytes(self):
-        im = vo.render(WALK, self.fonts)
-        self.assertEqual(bytes(vo.to_overlay_buffer(im)), im.tobytes())
 
 
 class DemoStateTests(unittest.TestCase):
